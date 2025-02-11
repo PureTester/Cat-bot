@@ -2,7 +2,7 @@
   "name": "cat-medicine-bot",
   "version": "1.0.0",
   "description": "Telegram bot for reminding to give medicine to a cat",
-  "main": "bot.mjs",
+  "main": "bot.js",
   "type": "module",
   "scripts": {
     "start": "node bot.js",

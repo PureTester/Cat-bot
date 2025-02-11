@@ -318,7 +318,7 @@ bot.hears("Показать статистику 📊", async (ctx) => {
 
     let message = "Статистика:\n";
     result.rows.forEach((row) => {
-      const date = row.statistics.data;
+      const date = row.data;
       const status = `Утро: ${row.morning ? "✅" : "❌"}, Обед: ${
         row.afternoon ? "✅" : "❌"
       }, Вечер: ${row.evening ? "✅" : "❌"}`;
