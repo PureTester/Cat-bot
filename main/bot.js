@@ -6,13 +6,14 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Конфигурация бота и базы данных
-const BOT_TOKEN = process.env.BOT_TOKEN;
+const BOT_TOKEN =
+  process.env.BOT_TOKEN || "7992161931:AAHkzPMR5VsPOgFIxjbBNy2w1jpuydurrpA";
 const dbConfig = {
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT),
+  user: process.env.DB_USER || "postgres",
+  host: process.env.DB_HOST || "localhost",
+  database: process.env.DB_NAME || "Cat_Medicine",
+  password: process.env.DB_PASSWORD || "Putin",
+  port: parseInt(process.env.DB_PORT || "5432"),
 };
 
 const dbClient = new Client(dbConfig);
@@ -27,43 +28,14 @@ dbClient
   .then(() => console.log("Подключение к базе данных успешно."))
   .catch((err) => console.error("Ошибка подключения к базе данных:", err));
 
-// Загрузка состояния пользователей из базы данных
-async function loadUserStateFromDB() {
+// Добавление нового пользователя
+async function addUser(userId, username) {
   try {
-    const usersQuery = "SELECT id FROM users";
-    const usersResult = await dbClient.query(usersQuery);
-
-    for (const userRow of usersResult.rows) {
-      const userId = userRow.id;
-
-      const statsQuery = `
-        SELECT morning, afternoon, evening
-        FROM statistics
-        WHERE user_id = $1
-        ORDER BY date DESC
-        LIMIT 1
-      `;
-      const statsResult = await dbClient.query(statsQuery, [userId]);
-
-      if (statsResult.rowCount > 0) {
-        const lastRecord = statsResult.rows[0];
-        userState[userId] = {
-          lastTaken: {
-            morning: lastRecord.morning,
-            afternoon: lastRecord.afternoon,
-            evening: lastRecord.evening,
-          },
-        };
-      } else {
-        userState[userId] = {
-          lastTaken: { morning: false, afternoon: false, evening: false },
-        };
-      }
-    }
-
-    console.log("Состояние пользователей успешно загружено из базы данных.");
+    const query = "INSERT INTO users (id, username) VALUES ($1, $2)";
+    await dbClient.query(query, [userId, username]);
   } catch (error) {
-    console.error("Ошибка при загрузке состояния пользователей:", error);
+    console.error("Ошибка при добавлении пользователя:", error);
+    throw error;
   }
 }
 
@@ -119,8 +91,48 @@ bot.command("start", async (ctx) => {
   }
 });
 
+// Загрузка состояния пользователей из базы данных
+async function loadUserStateFromDB() {
+  try {
+    const usersQuery = "SELECT id FROM users";
+    const usersResult = await dbClient.query(usersQuery);
+
+    for (const userRow of usersResult.rows) {
+      const userId = userRow.id;
+
+      const statsQuery = `
+        SELECT morning, afternoon, evening
+        FROM statistics
+        WHERE user_id = $1
+        ORDER BY data DESC
+        LIMIT 1
+      `;
+      const statsResult = await dbClient.query(statsQuery, [userId]);
+
+      if (statsResult.rowCount > 0) {
+        const lastRecord = statsResult.rows[0];
+        userState[userId] = {
+          lastTaken: {
+            morning: lastRecord.morning,
+            afternoon: lastRecord.afternoon,
+            evening: lastRecord.evening,
+          },
+        };
+      } else {
+        userState[userId] = {
+          lastTaken: { morning: false, afternoon: false, evening: false },
+        };
+      }
+    }
+
+    console.log("Состояние пользователей успешно загружено из базы данных.");
+  } catch (error) {
+    console.error("Ошибка при загрузке состояния пользователей:", error);
+  }
+}
+
 // Обработка сообщения "да"
-bot.hears("Дать таблетку", async (ctx) => {
+bot.hears("Дать таблетку 🐾", async (ctx) => {
   const userId = ctx.from.id;
 
   if (!userState[userId]) {
@@ -158,13 +170,13 @@ async function saveDose(userId, timeSlot) {
   try {
     const checkQuery = `
       SELECT * FROM statistics 
-      WHERE user_id = $1 AND date = $2
+      WHERE user_id = $1 AND data = $2
     `;
     const result = await dbClient.query(checkQuery, [userId, today]);
 
     if (result.rowCount === 0) {
       const insertQuery = `
-        INSERT INTO statistics (user_id, date, morning, afternoon, evening)
+        INSERT INTO statistics (user_id, data, morning, afternoon, evening)
         VALUES ($1, $2, $3, $4, $5)
       `;
       await dbClient.query(insertQuery, [userId, today, false, false, false]);
@@ -173,7 +185,7 @@ async function saveDose(userId, timeSlot) {
     const updateQuery = `
       UPDATE statistics
       SET ${timeSlot} = TRUE
-      WHERE user_id = $1 AND date = $2
+      WHERE user_id = $1 AND data = $2
     `;
     await dbClient.query(updateQuery, [userId, today]);
   } catch (error) {
@@ -190,17 +202,6 @@ async function checkUserExists(userId) {
     return result.rowCount > 0;
   } catch (error) {
     console.error("Ошибка при проверке пользователя:", error);
-    throw error;
-  }
-}
-
-// Добавление нового пользователя
-async function addUser(userId, username) {
-  try {
-    const query = "INSERT INTO users (id, username) VALUES ($1, $2)";
-    await dbClient.query(query, [userId, username]);
-  } catch (error) {
-    console.error("Ошибка при добавлении пользователя:", error);
     throw error;
   }
 }
@@ -275,19 +276,19 @@ function checkMissedDoses() {
 }
 
 // Сохранение статистики
-async function saveStatistics(userId, date, doses) {
+async function saveStatistics(userId, data, doses) {
   try {
     const query = `
-      INSERT INTO statistics (user_id, date, morning, afternoon, evening)
+      INSERT INTO statistics (user_id, data, morning, afternoon, evening)
       VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (user_id, date) DO UPDATE
+      ON CONFLICT (user_id, data) DO UPDATE
       SET morning = EXCLUDED.morning,
           afternoon = EXCLUDED.afternoon,
           evening = EXCLUDED.evening
     `;
     await dbClient.query(query, [
       userId,
-      date,
+      data,
       doses.morning,
       doses.afternoon,
       doses.evening,
@@ -299,15 +300,15 @@ async function saveStatistics(userId, date, doses) {
 }
 
 // Команда /stats
-bot.hears("Показать статистику", async (ctx) => {
+bot.hears("Показать статистику 📊", async (ctx) => {
   const userId = ctx.from.id;
 
   try {
     const query = `
-      SELECT date, morning, afternoon, evening
+      SELECT data, morning, afternoon, evening
       FROM statistics
       WHERE user_id = $1
-      ORDER BY date DESC
+      ORDER BY data DESC
     `;
     const result = await dbClient.query(query, [userId]);
 
@@ -317,7 +318,7 @@ bot.hears("Показать статистику", async (ctx) => {
 
     let message = "Статистика:\n";
     result.rows.forEach((row) => {
-      const date = row.date;
+      const date = row.statistics.data;
       const status = `Утро: ${row.morning ? "✅" : "❌"}, Обед: ${
         row.afternoon ? "✅" : "❌"
       }, Вечер: ${row.evening ? "✅" : "❌"}`;
